@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Patient: {{ patient.full_name }}</h3>
+<p><strong>DOB:</strong> {{ patient.date_of_birth|default:"—" }}</p>
+<p><strong>Phone:</strong> {{ patient.phone|default:"—" }}</p>
+<p><strong>Address:</strong> {{ patient.address|default:"—" }}</p>
+<p><strong>Height/Weight:</strong> {{ patient.height_cm|default:"—" }} cm / {{ patient.weight_kg|default:"—" }} kg</p>
+
+<h4 class="mt-4">Health Records</h4>
+<table class="table table-striped">
+  <thead><tr><th>Date</th><th>BP</th><th>Sugar (fasting/pp)</th><th>Notes</th><th>Attachment</th></tr></thead>
+  <tbody>
+    {% for r in records %}
+      <tr>
+        <td>{{ r.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ r.systolic_bp|default:"-" }}/{{ r.diastolic_bp|default:"-" }}</td>
+        <td>{{ r.sugar_fasting|default:"-" }}/{{ r.sugar_pp|default:"-" }}</td>
+        <td>{{ r.notes|default:"-" }}</td>
+        <td>{% if r.attachment %}<a href="{{ r.attachment.url }}">Download</a>{% else %}-{% endif %}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5">No records yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Patient Dashboard</h3>
+<p><strong>Name:</strong> {{ patient.full_name }}</p>
+<p><strong>Physician:</strong> {{ patient.physician|default:"Not linked" }}</p>
+<p><strong>Height (cm):</strong> {{ patient.height_cm|default:"—" }} |
+<strong>Weight (kg):</strong> {{ patient.weight_kg|default:"—" }}</p>
+
+<a class="btn btn-secondary mb-3" href="{% url 'patient_profile_edit' %}">Edit Profile / Link Physician</a>
+<a class="btn btn-primary mb-3" href="{% url 'record_create' %}">Add Health Record</a>
+
+<h4>My Records</h4>
+<table class="table table-striped">
+  <thead>
+    <tr><th>Date</th><th>BP</th><th>Sugar (fasting/pp)</th><th>Attachment</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for r in records %}
+      <tr>
+        <td>{{ r.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{{ r.systolic_bp|default:"-" }}/{{ r.diastolic_bp|default:"-" }}</td>
+        <td>{{ r.sugar_fasting|default:"-" }}/{{ r.sugar_pp|default:"-" }}</td>
+        <td>{% if r.attachment %}<a href="{{ r.attachment.url }}">Download</a>{% else %}-{% endif %}</td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{% url 'record_edit' r.id %}">Edit</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5">No records yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
