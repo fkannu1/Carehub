@@ -4,7 +4,8 @@ from django.contrib import admin
 from django.urls import path
 
 from core.views import (
-    SimpleLoginView, SimpleLogoutView,
+    SimpleLoginView,  # still available if you prefer
+    instant_logout,   # <- use this for GET logout
     signup_patient, signup_physician,
     dashboard_router,
     patient_dashboard, patient_profile_edit, record_create, record_edit,
@@ -16,7 +17,8 @@ urlpatterns = [
 
     # Auth
     path("login/", SimpleLoginView.as_view(), name="login"),
-    path("logout/", SimpleLogoutView.as_view(), name="logout"),
+    path("logout/", instant_logout, name="logout"),
+
     path("signup/patient/", signup_patient, name="signup_patient"),
     path("signup/physician/", signup_physician, name="signup_physician"),
 

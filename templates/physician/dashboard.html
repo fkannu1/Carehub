@@ -1,31 +1,22 @@
-{% extends "base.html" %}
-{% block content %}
-<h3>Physician Dashboard</h3>
-<p><strong>Name:</strong> {{ doctor.full_name }} |
-<strong>Connect Code:</strong> <code>{{ doctor.connect_code }}</code></p>
+<h3 class="mb-3">Welcome, {{ patient.full_name }} 👋</h3>
 
-<form class="row row-cols-lg-auto g-3 align-items-center mb-3" method="get">
-  <div class="col-12">
-    <input type="text" class="form-control" name="q" value="{{ q }}" placeholder="Search patients">
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card p-3 text-center bg-light">
+      <h6 class="text-muted mb-1">Height</h6>
+      <h4>{{ patient.height_cm|default:"—" }} cm</h4>
+    </div>
   </div>
-  <div class="col-12">
-    <button class="btn btn-outline-primary">Search</button>
+  <div class="col-md-4">
+    <div class="card p-3 text-center bg-light">
+      <h6 class="text-muted mb-1">Weight</h6>
+      <h4>{{ patient.weight_kg|default:"—" }} kg</h4>
+    </div>
   </div>
-</form>
-
-<table class="table table-striped">
-  <thead><tr><th>Name</th><th>Phone</th><th>Username</th><th></th></tr></thead>
-  <tbody>
-    {% for p in patients %}
-      <tr>
-        <td>{{ p.full_name }}</td>
-        <td>{{ p.phone|default:"-" }}</td>
-        <td>{{ p.user.username }}</td>
-        <td><a class="btn btn-sm btn-primary" href="{% url 'physician_patient_detail' p.id %}">View</a></td>
-      </tr>
-    {% empty %}
-      <tr><td colspan="4">No patients yet.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endblock %}
+  <div class="col-md-4">
+    <div class="card p-3 text-center bg-light">
+      <h6 class="text-muted mb-1">Physician</h6>
+      <h4>{{ patient.physician.full_name|default:"Not Linked" }}</h4>
+    </div>
+  </div>
+</div>

@@ -51,7 +51,6 @@ class HealthRecord(models.Model):
     sugar_fasting = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     sugar_pp = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
-
     attachment = models.FileField(upload_to="lab_files/", null=True, blank=True)
 
     def __str__(self):
