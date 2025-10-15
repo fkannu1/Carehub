@@ -1,19 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<h3>Patient Dashboard</h3>
+<h3 class="mb-3">Patient Dashboard</h3>
 <p><strong>Name:</strong> {{ patient.full_name }}</p>
-<p><strong>Physician:</strong> {{ patient.physician|default:"Not linked" }}</p>
+<p><strong>Physician:</strong> {{ patient.physician.full_name|default:"Not Linked" }}</p>
 <p><strong>Height (cm):</strong> {{ patient.height_cm|default:"—" }} |
-<strong>Weight (kg):</strong> {{ patient.weight_kg|default:"—" }}</p>
+   <strong>Weight (kg):</strong> {{ patient.weight_kg|default:"—" }}</p>
 
-<a class="btn btn-secondary mb-3" href="{% url 'patient_profile_edit' %}">Edit Profile / Link Physician</a>
-<a class="btn btn-primary mb-3" href="{% url 'record_create' %}">Add Health Record</a>
+<a class="btn btn-secondary me-2" href="{% url 'patient_profile_edit' %}">Edit Profile / Link Physician</a>
+<a class="btn btn-primary" href="{% url 'record_create' %}">Add Health Record</a>
 
-<h4>My Records</h4>
+<h4 class="mt-4">My Records</h4>
 <table class="table table-striped">
-  <thead>
-    <tr><th>Date</th><th>BP</th><th>Sugar (fasting/pp)</th><th>Attachment</th><th></th></tr>
-  </thead>
+  <thead><tr><th>Date</th><th>BP</th><th>Sugar (fasting/pp)</th><th>Attachment</th><th></th></tr></thead>
   <tbody>
     {% for r in records %}
       <tr>

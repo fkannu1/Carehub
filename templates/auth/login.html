@@ -1,17 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-5">
-    <h3 class="mb-3">Login</h3>
-    <form method="post">
-      {% csrf_token %}
-      {{ form.as_p }}
-      <button class="btn btn-primary w-100">Login</button>
-    </form>
-    <hr>
-    <p>No account?</p>
-    <a class="btn btn-outline-success me-2" href="{% url 'signup_patient' %}">Sign up as Patient</a>
-    <a class="btn btn-outline-secondary" href="{% url 'signup_physician' %}">Sign up as Physician</a>
+  <div class="col-md-6 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h3 class="mb-3">Login</h3>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            {{ form.username }}
+            {% if form.username.errors %}<div class="text-danger small">{{ form.username.errors }}</div>{% endif %}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            {{ form.password }}
+            {% if form.password.errors %}<div class="text-danger small">{{ form.password.errors }}</div>{% endif %}
+          </div>
+          <button class="btn btn-primary w-100">Login</button>
+        </form>
+        <hr>
+        <p class="mb-2">No account?</p>
+        <a class="btn btn-outline-success me-2" href="{% url 'signup_patient' %}">Sign up as Patient</a>
+        <a class="btn btn-outline-secondary" href="{% url 'signup_physician' %}">Sign up as Physician</a>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

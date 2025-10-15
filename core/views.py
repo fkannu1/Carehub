@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import (
+    BootstrapLoginForm,          # <- styled login form
     PatientSignUpForm,
     PhysicianSignUpForm,
     PatientProfileForm,
@@ -12,22 +13,17 @@ from .forms import (
 )
 from .models import PatientProfile, PhysicianProfile, HealthRecord
 
-
 # ---------- Auth ----------
 class SimpleLoginView(LoginView):
     template_name = "auth/login.html"
+    form_class = BootstrapLoginForm
 
-
-# Use this if you ever want POST-only logout:
 class SimpleLogoutView(LogoutView):
     pass
 
-
 def instant_logout(request):
-    """Logout on GET then go back to login page (fixes 405)."""
     logout(request)
     return redirect("login")
-
 
 def signup_patient(request):
     if request.method == "POST":
@@ -40,7 +36,6 @@ def signup_patient(request):
         form = PatientSignUpForm()
     return render(request, "auth/signup_patient.html", {"form": form})
 
-
 def signup_physician(request):
     if request.method == "POST":
         form = PhysicianSignUpForm(request.POST)
@@ -52,13 +47,11 @@ def signup_physician(request):
         form = PhysicianSignUpForm()
     return render(request, "auth/signup_physician.html", {"form": form})
 
-
 @login_required
 def dashboard_router(request):
     if request.user.is_physician():
         return redirect("physician_dashboard")
     return redirect("patient_dashboard")
-
 
 # ---------- Patient ----------
 @login_required
@@ -68,7 +61,6 @@ def patient_dashboard(request):
     patient = request.user.patient
     records = patient.records.order_by("-created_at")
     return render(request, "patient/dashboard.html", {"patient": patient, "records": records})
-
 
 @login_required
 def patient_profile_edit(request):
@@ -92,7 +84,6 @@ def patient_profile_edit(request):
         form = PatientProfileForm(instance=patient)
     return render(request, "patient/profile_form.html", {"form": form})
 
-
 @login_required
 def record_create(request):
     if not request.user.is_patient():
@@ -109,7 +100,6 @@ def record_create(request):
         form = HealthRecordForm()
     return render(request, "patient/record_form.html", {"form": form})
 
-
 @login_required
 def record_edit(request, pk):
     if not request.user.is_patient():
@@ -125,7 +115,6 @@ def record_edit(request, pk):
         form = HealthRecordForm(instance=rec)
     return render(request, "patient/record_form.html", {"form": form})
 
-
 # ---------- Physician ----------
 @login_required
 def physician_dashboard(request):
@@ -139,7 +128,6 @@ def physician_dashboard(request):
             Q(full_name__icontains=q) | Q(phone__icontains=q) | Q(user__username__icontains=q)
         )
     return render(request, "physician/dashboard.html", {"doctor": doctor, "patients": patients, "q": q})
-
 
 @login_required
 def physician_patient_detail(request, patient_id):
