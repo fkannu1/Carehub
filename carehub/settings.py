@@ -13,6 +13,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    'rest_framework',
+    'oauth2_provider',
     "core",
 ]
 
@@ -70,3 +72,21 @@ AUTH_USER_MODEL = "core.User"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard_router"
 LOGOUT_REDIRECT_URL = "login"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "oauth2_provider.contrib.rest_framework.OAuth2Authentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.IsAuthenticated",
+    ),
+}
+
+OAUTH2_PROVIDER = {
+    "SCOPES": {
+        "read": "Read access",
+        "write": "Write access",
+    }
+}
+
