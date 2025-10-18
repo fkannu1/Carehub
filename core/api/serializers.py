@@ -1,14 +1,15 @@
+# core/api/serializers.py
 from rest_framework import serializers
 from core.models import PatientProfile
 
-
 class PatientSerializer(serializers.ModelSerializer):
+    public_id = serializers.UUIDField(read_only=True)
     physician_name = serializers.CharField(source="physician.full_name", read_only=True)
 
     class Meta:
         model = PatientProfile
         fields = [
-            "id",
+            "public_id",      # exposed identifier (UUID)
             "full_name",
             "date_of_birth",
             "phone",
@@ -17,11 +18,7 @@ class PatientSerializer(serializers.ModelSerializer):
             "weight_kg",
             "physician_name",
         ]
-        read_only_fields = ("id", "physician_name")
-        extra_kwargs = {
-            "phone": {"required": False, "allow_blank": True},
-            "address": {"required": False, "allow_blank": True},
-        }
+        read_only_fields = ("public_id", "physician_name")
 
     def validate_height_cm(self, v):
         if v is not None and v < 0:

@@ -3,5 +3,5 @@ from core.api.views import PatientListView, PatientDetailView
 
 urlpatterns = [
     path("patients/", PatientListView.as_view(), name="api_patient_list"),
-    path("patients/<int:pk>/", PatientDetailView.as_view(), name="api_patient_detail"),
+    path("patients/<uuid:public_id>/", PatientDetailView.as_view(), name="api_patient_detail"),
 ]

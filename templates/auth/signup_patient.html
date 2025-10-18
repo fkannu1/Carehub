@@ -1,14 +1,106 @@
 {% extends "base.html" %}
+
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-8">
+  <div class="col-lg-8 col-xl-7">
     <div class="card shadow-sm">
       <div class="card-body p-4">
         <h3 class="mb-3">Patient Sign Up</h3>
+
+        {# Non-field (form-wide) errors #}
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger" role="alert">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
         <form method="post" novalidate>
           {% csrf_token %}
-          {{ form.as_p }}
-          <button class="btn btn-primary">Create Account</button>
+
+          <!-- Account (User) -->
+          <h5 class="mt-2 mb-3">Account</h5>
+          <div class="mb-3">
+            {{ form.username.label_tag }}
+            {{ form.username }}
+            {{ form.username.errors }}
+          </div>
+
+          <div class="mb-3">
+            {{ form.email.label_tag }}
+            {{ form.email }}
+            {{ form.email.errors }}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              {{ form.password1.label_tag }}
+              {{ form.password1 }}
+              {{ form.password1.errors }}
+            </div>
+            <div class="col-md-6">
+              {{ form.password2.label_tag }}
+              {{ form.password2 }}
+              {{ form.password2.errors }}
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <!-- Patient Profile -->
+          <h5 class="mb-3">Profile</h5>
+
+          <div class="mb-3">
+            {{ form.full_name.label_tag }}
+            {{ form.full_name }}
+            {{ form.full_name.errors }}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              {{ form.date_of_birth.label_tag }}
+              {{ form.date_of_birth }}
+              {{ form.date_of_birth.errors }}
+            </div>
+            <div class="col-md-6">
+              {{ form.phone.label_tag }}
+              {{ form.phone }}
+              {{ form.phone.errors }}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            {{ form.address.label_tag }}
+            {{ form.address }}
+            {{ form.address.errors }}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              {{ form.height_cm.label_tag }}
+              {{ form.height_cm }}
+              {{ form.height_cm.errors }}
+            </div>
+            <div class="col-md-6">
+              {{ form.weight_kg.label_tag }}
+              {{ form.weight_kg }}
+              {{ form.weight_kg.errors }}
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <!-- Optional physician link via connect code -->
+          <h6 class="mb-2">Link Physician (optional)</h6>
+          <div class="mb-3">
+            {{ form.physician_connect_code.label_tag }}
+            {{ form.physician_connect_code }}
+            {% if form.physician_connect_code.help_text %}
+              <div class="form-text">{{ form.physician_connect_code.help_text }}</div>
+            {% endif %}
+            {{ form.physician_connect_code.errors }}
+          </div>
+
+          <button class="btn btn-primary w-100" type="submit">Create Account</button>
         </form>
       </div>
     </div>

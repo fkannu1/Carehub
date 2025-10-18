@@ -5,12 +5,13 @@ from django.contrib import admin
 from django.urls import path, include
 
 from core.views import (
-    SimpleLoginView,      # login page
-    instant_logout,       # GET logout
+    SimpleLoginView,
+    instant_logout,
     signup_patient, signup_physician,
     dashboard_router,
     patient_dashboard, patient_profile_edit, record_create, record_edit,
     physician_dashboard, physician_patient_detail,
+    regenerate_connect_code,  # ✅ added import
 )
 
 urlpatterns = [
@@ -29,16 +30,17 @@ urlpatterns = [
     path("patient/profile/", patient_profile_edit, name="patient_profile_edit"),
     path("patient/records/new/", record_create, name="record_create"),
     path("patient/records/<int:pk>/edit/", record_edit, name="record_edit"),
+
     path("physician/", physician_dashboard, name="physician_dashboard"),
     path("physician/patient/<int:patient_id>/", physician_patient_detail, name="physician_patient_detail"),
 
-    # OAuth2 provider (token, revoke, applications, etc.)
+    # ✅ new route for regenerating the connect code
+    path("physician/connect-code/regenerate/", regenerate_connect_code, name="regenerate_connect_code"),
+
+    # OAuth2
     path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
 
     # REST API
-    # NOTE: core/api_urls.py should define paths like:
-    #   path("patients/", PatientListView.as_view(), name="api_patient_list")
-    #   path("patients/<int:pk>/", PatientDetailView.as_view(), name="api_patient_detail")
     path("api/", include("core.api_urls")),
 ]
 

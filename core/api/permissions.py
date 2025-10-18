@@ -1,14 +1,14 @@
+# core/api/permissions.py
 from rest_framework.permissions import BasePermission
+
 
 class IsPhysician(BasePermission):
     """
-    Allow only authenticated users whose role is PHYSICIAN.
-    Works with your custom User that has is_physician().
+    Allows access only to users who have a PhysicianProfile attached.
+    Assumes a related_name 'physician' on the User -> PhysicianProfile relation.
     """
+
+    message = "You must be a physician to access this resource."
+
     def has_permission(self, request, view):
-        user = request.user
-        return bool(
-            user
-            and user.is_authenticated
-            and getattr(user, "is_physician", lambda: False)()
-        )
+        return bool(getattr(request.user, "is_authenticated", False) and hasattr(request.user, "physician"))
