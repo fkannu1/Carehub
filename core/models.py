@@ -104,12 +104,33 @@ class AvailabilitySlot(models.Model):
             models.Index(fields=["physician", "end"]),
         ]
 
+    @property
+    def is_past(self) -> bool:
+        return self.end <= timezone.now()
+
     def clean(self):
+        # basic order check
         if self.start >= self.end:
             raise ValidationError("Slot start must be before end.")
-        # Optional: ensure the user is actually a physician
-        # (kept soft here to avoid import cycles)
-        # You can enforce in forms/admin as well.
+
+        # ensure the FK is a physician account (soft check; avoids circular imports)
+        if hasattr(self.physician, "role") and getattr(self.physician, "role") != User.Roles.PHYSICIAN:
+            raise ValidationError("Availability slots may only belong to physicians.")
+
+        # prevent overlapping open slots for the same physician
+        # (SQLite can't enforce exclusion constraints; validate here)
+        overlap_qs = AvailabilitySlot.objects.filter(
+            physician=self.physician,
+            start__lt=self.end,
+            end__gt=self.start,
+        ).exclude(pk=self.pk)
+        if overlap_qs.exists():
+            raise ValidationError("This slot overlaps with an existing slot for this physician.")
+
+    def save(self, *args, **kwargs):
+        # always run model validation when saving from code/admin
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.physician} | {self.start:%Y-%m-%d %H:%M} → {self.end:%H:%M}"
@@ -146,14 +167,22 @@ class Appointment(models.Model):
         # Ensure slot belongs to the same physician
         if self.slot.physician_id != self.physician_id:
             raise ValidationError("Slot physician mismatch.")
+
         # Disallow double-booking
         if self.slot.is_booked:
             raise ValidationError("Slot already booked.")
 
+        # Can't book past
+        if self.slot.start <= timezone.now():
+            raise ValidationError("Cannot book a past slot.")
+
     def save(self, *args, **kwargs):
         creating = self._state.adding
+        # validate before saving
+        self.full_clean()
         super().save(*args, **kwargs)
         if creating:
+            # mark slot as booked
             AvailabilitySlot.objects.filter(pk=self.slot_id).update(is_booked=True)
 
     def __str__(self):

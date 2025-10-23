@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h3 class="mb-3">Chat with {{ peer.username }}</h3>
+
+  <div class="alert alert-info">
+    Conversation ID: <code>{{ conversation.id }}</code>
+  </div>
+
+  <div id="chat-box" class="border rounded p-3 mb-3 bg-light" style="height:320px; overflow-y:auto;">
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="mb-2 {% if msg.sender == user %}text-end{% endif %}">
+          <div class="small text-muted">{{ msg.created_at|time:"H:i" }}</div>
+          <div>
+            <span class="fw-bold">{{ msg.sender.username }}</span>:
+            <span>{{ msg.body }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted m-0">No messages yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="input-group">
+    <input id="msg-input" type="text" class="form-control" placeholder="Type a message…" autocomplete="off">
+    <button id="send-btn" class="btn btn-primary" type="button">Send</button>
+  </div>
+</div>
+
+{% comment %}
+  Frontend uses the combined GET/POST API:
+  - GET  -> returns {"messages":[{id, sender, content, timestamp}]}
+  - POST -> accepts {"content": "..."} and returns the created message
+{% endcomment %}
+<script>
+(function () {
+  const API_URL = "{% url 'messages-json' conversation.id %}";
+  const chatBox = document.getElementById("chat-box");
+  const input   = document.getElementById("msg-input");
+  const sendBtn = document.getElementById("send-btn");
+
+  // Keep track of which message IDs we've rendered to avoid duplicates on poll
+  const seen = new Set();
+  // Seed with any messages rendered server-side (by scanning data-ids we add below if you want).
+  // Here we just let polling reconcile once.
+
+  function renderMessage(username, content, timestamp, alignRight) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "mb-2" + (alignRight ? " text-end" : "");
+    wrapper.innerHTML = `
+      <div class="small text-muted">${timestamp}</div>
+      <div><span class="fw-bold">${username}</span>: <span>${content}</span></div>
+    `;
+    chatBox.appendChild(wrapper);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text })
+      });
+      const data = await res.json();
+      if (data && data.id) {
+        seen.add(data.id);
+        // This is "me", so align right
+        renderMessage(data.sender, data.content, data.timestamp, true);
+        input.value = "";
+        input.focus();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function pollMessages() {
+    try {
+      const res = await fetch(API_URL);
+      const payload = await res.json();
+      if (!payload || !payload.messages) return;
+      payload.messages.forEach(msg => {
+        if (seen.has(msg.id)) return;
+        seen.add(msg.id);
+        const isMe = (msg.sender === "{{ user.username|escapejs }}");
+        renderMessage(msg.sender, msg.content, msg.timestamp, isMe);
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // Controls
+  sendBtn.addEventListener("click", sendMessage);
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Initial poll (will also normalize any server-rendered messages into 'seen')
+  pollMessages();
+  // Poll every 4s for updates (simple approach until websockets)
+  setInterval(pollMessages, 4000);
+})();
+</script>
+{% endblock %}

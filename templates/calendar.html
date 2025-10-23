@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Calendar · CareHub{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">📅 Appointments</h3>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+  <label class="form-label me-2 mb-0" for="physicianSelect">Physician:</label>
+  <select id="physicianSelect" class="form-select" style="max-width: 260px;">
+    {% if default_physician_id %}
+      <option value="{{ default_physician_id }}">Current</option>
+    {% else %}
+      <option value="">Select…</option>
+    {% endif %}
+  </select>
+  <button id="reloadBtn" class="btn btn-outline-secondary">Reload Slots</button>
+</div>
+
+<div id="calendar"></div>
+
+<!-- Toast -->
+<div id="toast" class="toast align-items-center text-white bg-dark border-0 position-fixed"
+     role="alert" aria-live="assertive" aria-atomic="true"
+     style="top:16px; right:16px; z-index:9999;">
+  <div class="d-flex">
+    <div class="toast-body">...</div>
+    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+  </div>
+</div>
+
+<!-- FullCalendar (CDN) -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function showToast(msg, ok = true) {
+    const el = document.getElementById('toast');
+    el.classList.remove('bg-danger','bg-dark');
+    el.classList.add(ok ? 'bg-dark' : 'bg-danger');
+    el.querySelector('.toast-body').textContent = msg;
+    const bsToast = new bootstrap.Toast(el, { delay: 2500 });
+    bsToast.show();
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+    return null;
+  }
+
+  const DEFAULT_PHYSICIAN_ID = "{{ default_physician_id|default:'' }}";
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const calEl = document.getElementById('calendar');
+    const physicianSelect = document.getElementById('physicianSelect');
+    const reloadBtn = document.getElementById('reloadBtn');
+
+    if (DEFAULT_PHYSICIAN_ID && !physicianSelect.value) {
+      physicianSelect.value = DEFAULT_PHYSICIAN_ID;
+    }
+
+    const calendar = new FullCalendar.Calendar(calEl, {
+      initialView: 'timeGridWeek',
+      height: 'auto',
+      nowIndicator: true,
+      headerToolbar: {
+        start: 'prev,next today',
+        center: 'title',
+        end: 'dayGridMonth,timeGridWeek,timeGridDay'
+      },
+      events: async (info, success, failure) => {
+        const physicianId = physicianSelect.value;
+        if (!physicianId) { success([]); return; }
+        try {
+          const url = `/api/physicians/${physicianId}/slots/`;
+          const res = await fetch(url, { credentials: 'same-origin' });
+          if (!res.ok) throw new Error('Failed to load slots');
+          const data = await res.json();
+          const events = (data.slots || []).map(s => ({
+            id: s.id,
+            title: 'Available',
+            start: s.start,
+            end: s.end,
+            backgroundColor: '#10b981',
+            borderColor: '#10b981'
+          }));
+          success(events);
+        } catch (e) {
+          failure(e);
+          showToast('Error loading slots', false);
+        }
+      },
+      eventClick: async (info) => {
+        const slotId = info.event.id;
+        if (!slotId) return;
+        if (!confirm('Book this appointment slot?')) return;
+
+        try {
+          const res = await fetch('/api/appointments/create/', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ slot_id: slotId })
+          });
+          if (!res.ok) { throw new Error(await res.text() || 'Booking failed'); }
+          await res.json();
+          showToast('Appointment booked ✅');
+          calendar.refetchEvents();
+        } catch (e) {
+          showToast(e.message || 'Booking failed', false);
+        }
+      }
+    });
+
+    calendar.render();
+    reloadBtn.addEventListener('click', () => calendar.refetchEvents());
+    physicianSelect.addEventListener('change', () => calendar.refetchEvents());
+  });
+</script>
+{% endblock %}

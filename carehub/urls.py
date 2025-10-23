@@ -11,7 +11,7 @@ from core.views import (
     dashboard_router,
     patient_dashboard, patient_profile_edit, record_create, record_edit,
     physician_dashboard, physician_patient_detail,
-    regenerate_connect_code,  # ✅ added import
+    regenerate_connect_code,
 )
 
 urlpatterns = [
@@ -34,14 +34,14 @@ urlpatterns = [
     path("physician/", physician_dashboard, name="physician_dashboard"),
     path("physician/patient/<int:patient_id>/", physician_patient_detail, name="physician_patient_detail"),
 
-    # ✅ new route for regenerating the connect code
+    # Regenerate connect code
     path("physician/connect-code/regenerate/", regenerate_connect_code, name="regenerate_connect_code"),
 
     # OAuth2
     path("o/", include("oauth2_provider.urls", namespace="oauth2_provider")),
 
-    # REST API
-    path("api/", include("core.api_urls")),
+    # Core app routes (calendar, slots, chat, and your API mounted under /api/)
+    path("", include("core.urls")),
 ]
 
 if settings.DEBUG:
