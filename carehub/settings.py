@@ -13,8 +13,11 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    'rest_framework',
-    'oauth2_provider',
+    "rest_framework",
+    "oauth2_provider",
+    # Realtime
+    "channels",
+    # Local apps
     "core",
 ]
 
@@ -46,7 +49,18 @@ TEMPLATES = [
     },
 ]
 
+# Keep WSGI for compatibility with classic HTTP servers
 WSGI_APPLICATION = "carehub.wsgi.application"
+
+# Enable ASGI for WebSockets (Channels)
+ASGI_APPLICATION = "carehub.asgi.application"
+
+# Dev channel layer (in-memory). We'll switch to Redis in prod.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
 
 DATABASES = {
     "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}
@@ -60,7 +74,6 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
-
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -89,4 +102,3 @@ OAUTH2_PROVIDER = {
         "write": "Write access",
     }
 }
-
