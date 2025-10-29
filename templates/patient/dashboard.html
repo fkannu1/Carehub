@@ -1,10 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
-<h3 class="mb-3">Patient Dashboard</h3>
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <h3 class="mb-0">Patient Dashboard</h3>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'chat_new' %}">Start new message</a>
+    {% if patient.physician and patient.physician.user %}
+      {# NEW: quick message to my linked physician #}
+      <a class="btn btn-primary btn-sm" href="{% url 'chat_start_with_user' patient.physician.user.id %}">
+        Message Physician
+      </a>
+    {% endif %}
+  </div>
+</div>
+
 <p><strong>Name:</strong> {{ patient.full_name }}</p>
-<p><strong>Physician:</strong> {{ patient.physician.full_name|default:"Not Linked" }}</p>
-<p><strong>Height (cm):</strong> {{ patient.height_cm|default:"—" }} |
-   <strong>Weight (kg):</strong> {{ patient.weight_kg|default:"—" }}</p>
+<p>
+  <strong>Physician:</strong>
+  {% if patient.physician and patient.physician.full_name %}
+    {{ patient.physician.full_name }}
+  {% else %}
+    Not Linked
+  {% endif %}
+</p>
+<p>
+  <strong>Height (cm):</strong> {{ patient.height_cm|default:"—" }} |
+  <strong>Weight (kg):</strong> {{ patient.weight_kg|default:"—" }}
+</p>
 
 <a class="btn btn-secondary me-2" href="{% url 'patient_profile_edit' %}">Edit Profile / Link Physician</a>
 <a class="btn btn-primary" href="{% url 'record_create' %}">Add Health Record</a>

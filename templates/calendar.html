@@ -4,7 +4,7 @@
 {% block title %}Calendar · CareHub{% endblock %}
 
 {% block content %}
-<h3 class="mb-3">📅 Appointments</h3>
+<h3 class="mb-3">Appointments</h3>
 
 <div class="d-flex align-items-center gap-2 mb-3">
   <label class="form-label me-2 mb-0" for="physicianSelect">Physician:</label>
@@ -15,7 +15,28 @@
       <option value="">Select…</option>
     {% endif %}
   </select>
-  <button id="reloadBtn" class="btn btn-outline-secondary">Reload Slots</button>
+
+  <label class="form-label ms-3 me-2 mb-0" for="durationSelect">Duration (view/book):</label>
+  <select id="durationSelect" class="form-select" style="max-width: 140px;">
+    <option value="30" selected>30 min</option>
+    <option value="45">45 min</option>
+    <option value="60">60 min</option>
+  </select>
+
+  <button id="reloadBtn" class="btn btn-outline-secondary ms-2">Reload</button>
+</div>
+
+{% if is_physician %}
+<div class="alert alert-info py-2">
+  Tip: Drag or click on the calendar to create a free-time window at that start.
+  You’ll choose <strong>30 / 45 / 60</strong> in a popup. Patients then book inside it.
+</div>
+{% endif %}
+
+<!-- Config for JS -->
+<div id="cal-config"
+     data-physician-id="{{ default_physician_id|default:'' }}"
+     data-is-physician="{% if is_physician %}1{% else %}0{% endif %}">
 </div>
 
 <div id="calendar"></div>
@@ -30,8 +51,30 @@
   </div>
 </div>
 
-<!-- FullCalendar (CDN) -->
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+<!-- Physician duration picker modal -->
+<div class="modal fade" id="durationPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:360px;">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">Create availability</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 small text-muted" id="pickedStartText">Start:</div>
+        <div class="d-grid gap-2">
+          <button type="button" class="btn btn-outline-primary dur-btn" data-min="30">30 minutes</button>
+          <button type="button" class="btn btn-outline-primary dur-btn" data-min="45">45 minutes</button>
+          <button type="button" class="btn btn-outline-primary dur-btn" data-min="60">60 minutes</button>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" />
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 {% endblock %}
 
@@ -42,7 +85,7 @@
     el.classList.remove('bg-danger','bg-dark');
     el.classList.add(ok ? 'bg-dark' : 'bg-danger');
     el.querySelector('.toast-body').textContent = msg;
-    const bsToast = new bootstrap.Toast(el, { delay: 2500 });
+    const bsToast = new bootstrap.Toast(el, { delay: 2200 });
     bsToast.show();
   }
 
@@ -53,12 +96,60 @@
     return null;
   }
 
-  const DEFAULT_PHYSICIAN_ID = "{{ default_physician_id|default:'' }}";
-
   document.addEventListener('DOMContentLoaded', function () {
+    const cfgEl = document.getElementById('cal-config');
+    const DEFAULT_PHYSICIAN_ID = cfgEl.dataset.physicianId || "";
+    const IS_PHYSICIAN = cfgEl.dataset.isPhysician === "1";
+
     const calEl = document.getElementById('calendar');
     const physicianSelect = document.getElementById('physicianSelect');
+    const durationSelect = document.getElementById('durationSelect');
     const reloadBtn = document.getElementById('reloadBtn');
+
+    // modal bits
+    const modalEl = document.getElementById('durationPickerModal');
+    const modal = new bootstrap.Modal(modalEl);
+    const pickedStartText = document.getElementById('pickedStartText');
+    let pendingStartIso = null;   // selection start we’ll use to create window
+
+    // duration button handler (physician creation)
+    modalEl.querySelectorAll('.dur-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const min = parseInt(btn.dataset.min, 10);
+        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
+        if (!physicianId || !pendingStartIso) return;
+
+        const startDate = new Date(pendingStartIso);
+        const endIso = new Date(startDate.getTime() + min * 60000).toISOString();
+
+        try {
+          const res = await fetch(`/api/physicians/${physicianId}/availability/`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ start: pendingStartIso, end: endIso })
+          });
+          if (!res.ok) {
+            const t = await res.text().catch(()=> '');
+            throw new Error(t || 'Failed to save availability');
+          }
+
+          // make the chosen length visible immediately
+          durationSelect.value = String(min);
+
+          modal.hide();
+          showToast(`Availability ${min} min created`);
+          calendar.unselect();
+          calendar.refetchEvents();
+        } catch (e) {
+          console.error(e);
+          showToast(e.message || 'Failed to save availability', false);
+        }
+      });
+    });
 
     if (DEFAULT_PHYSICIAN_ID && !physicianSelect.value) {
       physicianSelect.value = DEFAULT_PHYSICIAN_ID;
@@ -68,61 +159,116 @@
       initialView: 'timeGridWeek',
       height: 'auto',
       nowIndicator: true,
+
+      // <<< important for 45-min support >>>
+      slotDuration: '00:15:00',     // grid rows are 15 minutes
+      snapDuration: '00:15:00',     // selections/clicks snap to 15 minutes
+      slotLabelInterval: '01:00',   // hour labels
+
+      selectable: IS_PHYSICIAN,     // physicians can select to create
+      selectMirror: true,
+      unselectAuto: true,
+      slotMinTime: '06:00:00',
+      slotMaxTime: '22:00:00',
       headerToolbar: {
         start: 'prev,next today',
         center: 'title',
         end: 'dayGridMonth,timeGridWeek,timeGridDay'
       },
+
+      // Render events (green availables + red booked) from backend
       events: async (info, success, failure) => {
-        const physicianId = physicianSelect.value;
+        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
+        const duration = durationSelect.value || 30;
         if (!physicianId) { success([]); return; }
+
+        const url = `/api/physicians/${physicianId}/slots/?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}&duration=${encodeURIComponent(duration)}`;
+
         try {
-          const url = `/api/physicians/${physicianId}/slots/`;
           const res = await fetch(url, { credentials: 'same-origin' });
-          if (!res.ok) throw new Error('Failed to load slots');
+          if (!res.ok) {
+            const t = await res.text().catch(()=>'');
+            throw new Error(t || 'Failed to load slots');
+          }
           const data = await res.json();
-          const events = (data.slots || []).map(s => ({
-            id: s.id,
-            title: 'Available',
-            start: s.start,
-            end: s.end,
-            backgroundColor: '#10b981',
-            borderColor: '#10b981'
-          }));
-          success(events);
+          success(data);
         } catch (e) {
+          console.error(e);
           failure(e);
           showToast('Error loading slots', false);
         }
       },
+
+      // PHYSICIAN: show modal to pick 30/45/60 — we create exactly one window of that length
+      select: (selectionInfo) => {
+        if (!IS_PHYSICIAN) return;
+        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
+        if (!physicianId) { showToast('Select a physician first', false); return; }
+
+        // We ignore how far the user dragged; anchor at selection start.
+        pendingStartIso = selectionInfo.start.toISOString();
+        pickedStartText.textContent = `Start: ${selectionInfo.start.toLocaleString()}`;
+
+        calendar.unselect(); // tidy highlight
+        modal.show();
+      },
+
+      // PATIENT: click an "Available" block to book
       eventClick: async (info) => {
-        const slotId = info.event.id;
-        if (!slotId) return;
-        if (!confirm('Book this appointment slot?')) return;
+        if (IS_PHYSICIAN) return;  // physicians don’t book from their own calendar
+        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
+        if (!physicianId) return;
+
+        const duration = parseInt(durationSelect.value || '30', 10);
+        const startIso = info.event.start.toISOString();
+
+        if (!confirm(`Book ${duration} min starting ${info.event.start.toLocaleString()}?`)) return;
 
         try {
-          const res = await fetch('/api/appointments/create/', {
+          const res = await fetch('/api/clinic/flex-appointments/', {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': getCookie('csrftoken'),
             },
-            body: JSON.stringify({ slot_id: slotId })
+            body: JSON.stringify({
+              physician: physicianId,
+              start: startIso,
+              duration_minutes: duration,
+              notes: ''
+            })
           });
-          if (!res.ok) { throw new Error(await res.text() || 'Booking failed'); }
+          if (!res.ok) {
+            const t = await res.text().catch(()=> '');
+            throw new Error(t || 'Booking failed');
+          }
           await res.json();
-          showToast('Appointment booked ✅');
+          showToast('Appointment booked');
           calendar.refetchEvents();
         } catch (e) {
+          console.error(e);
           showToast(e.message || 'Booking failed', false);
         }
       }
     });
 
     calendar.render();
+
     reloadBtn.addEventListener('click', () => calendar.refetchEvents());
     physicianSelect.addEventListener('change', () => calendar.refetchEvents());
+    durationSelect.addEventListener('change', () => calendar.refetchEvents());
+
+    // Also allow single click to open the modal at that start (handy on mobile)
+    if (IS_PHYSICIAN) {
+      calendar.setOption('dateClick', (arg) => {
+        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
+        if (!physicianId) { showToast('Select a physician first', false); return; }
+        pendingStartIso = arg.date.toISOString();
+        pickedStartText.textContent = `Start: ${arg.date.toLocaleString()}`;
+        modal.show();
+      });
+    }
   });
 </script>
 {% endblock %}

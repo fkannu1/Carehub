@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<h3 class="mb-3">Physician Dashboard</h3>
+<div class="d-flex align-items-center justify-content-between">
+  <h3 class="mb-3">Physician Dashboard</h3>
+  <a class="btn btn-outline-primary btn-sm" href="{% url 'chat_new' %}">Start new message</a>
+</div>
 
 <label class="form-label">Connect Code:</label>
 <div class="input-group mb-3" style="max-width: 420px;">
@@ -10,7 +13,6 @@
           onclick="navigator.clipboard.writeText(document.getElementById('connectCode').value)">
     Copy
   </button>
-  {% comment %} Remove this link if you didn't add the view/url I shared earlier {% endcomment %}
   <a class="btn btn-outline-danger" href="{% url 'regenerate_connect_code' %}">
     Regenerate
   </a>
@@ -25,9 +27,9 @@
   </div>
 </form>
 
-<table class="table table-striped">
+<table class="table table-striped align-middle">
   <thead>
-    <tr><th>Name</th><th>Phone</th><th>Username</th><th></th></tr>
+    <tr><th>Name</th><th>Phone</th><th>Username</th><th class="text-end">Actions</th></tr>
   </thead>
   <tbody>
     {% for p in patients %}
@@ -35,7 +37,11 @@
         <td>{{ p.full_name }}</td>
         <td>{{ p.phone|default:"-" }}</td>
         <td>{{ p.user.username }}</td>
-        <td><a class="btn btn-sm btn-primary" href="{% url 'physician_patient_detail' p.id %}">View</a></td>
+        <td class="text-end">
+          <a class="btn btn-sm btn-outline-secondary me-1" href="{% url 'physician_patient_detail' p.id %}">View</a>
+          {# NEW: start chat with this patient (no appointment required) #}
+          <a class="btn btn-sm btn-primary" href="{% url 'chat_start_with_user' p.user.id %}">Message</a>
+        </td>
       </tr>
     {% empty %}
       <tr><td colspan="4">No patients yet.</td></tr>

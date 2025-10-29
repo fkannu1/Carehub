@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h3>Patient: {{ patient.full_name }}</h3>
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <h3 class="mb-0">Patient: {{ patient.full_name }}</h3>
+  <div>
+    {# NEW: message this patient directly #}
+    <a class="btn btn-primary btn-sm" href="{% url 'chat_start_with_user' patient.user.id %}">Message Patient</a>
+  </div>
+</div>
+
 <p><strong>DOB:</strong> {{ patient.date_of_birth|default:"—" }}</p>
 <p><strong>Phone:</strong> {{ patient.phone|default:"—" }}</p>
 <p><strong>Address:</strong> {{ patient.address|default:"—" }}</p>
@@ -8,7 +15,9 @@
 
 <h4 class="mt-4">Health Records</h4>
 <table class="table table-striped">
-  <thead><tr><th>Date</th><th>BP</th><th>Sugar (fasting/pp)</th><th>Notes</th><th>Attachment</th></tr></thead>
+  <thead>
+    <tr><th>Date</th><th>BP</th><th>Sugar (fasting/pp)</th><th>Notes</th><th>Attachment</th></tr>
+  </thead>
   <tbody>
     {% for r in records %}
       <tr>

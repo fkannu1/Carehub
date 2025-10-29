@@ -38,10 +38,7 @@ class PatientDetailView(RetrieveAPIView):
     permission_classes = [IsAuthenticated, TokenHasScope, IsPhysician]
     required_scopes = ["read"]
 
-    # 🔑 use the UUID field from the model and the <uuid:public_id> from the URL
-    lookup_field = "public_id"
-    lookup_url_kwarg = "public_id"
+    lookup_field = "public_id"       # model field
+    lookup_url_kwarg = "public_id"   # <uuid:public_id> in URL
 
-    # limit to patients of the authenticated physician
     queryset = PatientProfile.objects.select_related("physician")
-

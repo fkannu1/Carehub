@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Chat · CareHub{% endblock %}
+
+{% block content %}
+<h4 class="d-flex justify-content-between align-items-center mb-3">
+  <span>
+    Chat with
+    {% if request.user.id == convo.patient_id %}
+      Dr. {{ convo.physician.username }}
+    {% else %}
+      {{ convo.patient.username }}
+    {% endif %}
+  </span>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'chat_inbox' %}">Back to Inbox</a>
+</h4>
+
+<!-- Chat area -->
+<div id="chatBox"
+     class="border rounded bg-white p-3 mb-3"
+     style="height: 440px; overflow-y: auto;">
+
+  {% comment %}
+  We render all messages inside the chat box only.
+  Nothing renders above this container.
+  {% endcomment %}
+
+  {% for m in messages %}
+    <div class="d-flex mb-2
+                {% if m.sender_id == request.user.id %}justify-content-end{% else %}justify-content-start{% endif %}"
+         data-mid="{{ m.id }}">
+      <div class="px-3 py-2 rounded
+                  {% if m.sender_id == request.user.id %}bg-primary text-white{% else %}bg-light{% endif %}">
+        {{ m.body|linebreaksbr }}
+        {% if m.attachment %}
+          <div class="mt-1">
+            <a href="{{ m.attachment.url }}" class="link-light text-decoration-underline" target="_blank">Attachment</a>
+          </div>
+        {% endif %}
+        <div class="small text-muted mt-1">{{ m.created_at|date:"M d, H:i" }}</div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="text-muted">No messages yet.</div>
+  {% endfor %}
+</div>
+
+<form action="{% url 'chat_send' convo.pk %}" method="post" enctype="multipart/form-data" class="d-flex gap-2">
+  {% csrf_token %}
+  <input id="msgInput" class="form-control" type="text" name="body" placeholder="Type a message..." autocomplete="off" />
+  <input type="file" name="attachment" class="form-control" style="max-width: 260px;">
+  <button id="sendBtn" type="submit" class="btn btn-primary">Send</button>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chatBox  = document.getElementById('chatBox');
+  const msgInput = document.getElementById('msgInput');
+
+  // Scroll to bottom on load
+  (function(){ chatBox.scrollTop = chatBox.scrollHeight; })();
+
+  // Track message ids we already have to de-dupe during polling
+  const seen = new Set(
+    Array.from(chatBox.querySelectorAll('[data-mid]')).map(n => n.getAttribute('data-mid'))
+  );
+
+  // Start from server-side "now" (epoch seconds) if provided; else 0
+  let last_ts = Number("{{ server_time|default:'0' }}");
+
+
+
+
+  async function poll() {
+    try {
+      const url = "{% url 'chat_fetch_since' convo.pk '0' %}".replace("/0/", "/" + String(last_ts) + "/");
+      const res = await fetch(url, { headers: { "Accept": "application/json" } });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (Array.isArray(data.messages)) {
+        for (const m of data.messages) {
+          if (seen.has(m.id)) continue;
+          seen.add(m.id);
+
+          const wrapper = document.createElement('div');
+          wrapper.className = "d-flex mb-2 " + (m.sender === "{{ request.user.id }}" ? "justify-content-end" : "justify-content-start");
+          wrapper.setAttribute("data-mid", m.id);
+
+          const bubble = document.createElement('div');
+          bubble.className = "px-3 py-2 rounded " + (m.sender === "{{ request.user.id }}" ? "bg-primary text-white" : "bg-light");
+          bubble.innerText = m.body || "";
+          wrapper.appendChild(bubble);
+
+          chatBox.appendChild(wrapper);
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
+      }
+      if (typeof data.server_time === "number") {
+        last_ts = data.server_time;
+      }
+    } catch (e) {
+      // no-op; keep polling
+    }
+  }
+
+  // Poll every 3 seconds
+  setInterval(poll, 3000);
+</script>
+{% endblock %}

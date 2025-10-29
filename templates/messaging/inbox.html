@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Messages · CareHub{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-2">
+  <h3 class="mb-0">Messages</h3>
+  <a class="btn btn-primary btn-sm" href="{% url 'chat_new' %}">Start new message</a>
+</div>
+
+{% if conversations and conversations|length %}
+  <div class="list-group">
+    {% for c in conversations %}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+         href="{% url 'chat_thread' c.pk %}">
+        <div class="me-3">
+          <div class="fw-semibold">
+            {% if user.id == c.patient_id %}
+              Dr. {{ c.physician.username }}
+            {% else %}
+              {{ c.patient.username }}
+            {% endif %}
+          </div>
+
+          {# Optional: show last message snippet if available #}
+          {% with last=c.messages.last %}
+            {% if last %}
+              <div class="small text-muted text-truncate" style="max-width:48ch;">
+                {{ last.sender.username }}: {{ last.body|default:"(attachment)" }}
+              </div>
+            {% endif %}
+          {% endwith %}
+
+          <small class="text-muted d-block mt-1">Updated {{ c.updated_at|date:"M d, H:i" }}</small>
+        </div>
+        <span class="badge bg-secondary">Open</span>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-light border d-flex align-items-center justify-content-between">
+    <span class="text-muted">No conversations yet.</span>
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'chat_new' %}">Start a message</a>
+  </div>
+{% endif %}
+{% endblock %}

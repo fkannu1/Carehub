@@ -6,10 +6,15 @@ from .models import (
     PatientProfile,
     PhysicianProfile,
     HealthRecord,
-    AvailabilitySlot,
-    Appointment,
+    AvailabilitySlot,   # legacy
+    Appointment,        # legacy
     Conversation,
     Message,
+    # NEW
+    PhysicianWeeklyAvailability,
+    PhysicianDateOverride,
+    TimeOff,
+    FlexAppointment,
 )
 
 # ----------------------------
@@ -70,7 +75,7 @@ class HealthRecordAdmin(admin.ModelAdmin):
 
 
 # ----------------------------
-# Availability & Appointments
+# LEGACY: Availability & Appointments
 # ----------------------------
 @admin.register(AvailabilitySlot)
 class AvailabilitySlotAdmin(admin.ModelAdmin):
@@ -90,7 +95,6 @@ class AppointmentAdmin(admin.ModelAdmin):
     date_hierarchy = "created_at"
     autocomplete_fields = ("patient", "physician", "slot")
 
-    # Helpers to show slot times as columns
     def slot_start(self, obj):
         return obj.slot.start
     slot_start.short_description = "Start"
@@ -98,6 +102,51 @@ class AppointmentAdmin(admin.ModelAdmin):
     def slot_end(self, obj):
         return obj.slot.end
     slot_end.short_description = "End"
+
+
+# ----------------------------
+# NEW: Window-based availability in Admin
+# ----------------------------
+@admin.register(PhysicianWeeklyAvailability)
+class PhysicianWeeklyAvailabilityAdmin(admin.ModelAdmin):
+    list_display = ("physician", "weekday", "start_time", "end_time", "snap_minutes", "is_active")
+    list_filter = ("physician", "weekday", "is_active")
+    search_fields = ("physician__username", "physician__email")
+    autocomplete_fields = ("physician",)
+    ordering = ("physician", "weekday", "start_time")
+
+
+@admin.register(PhysicianDateOverride)
+class PhysicianDateOverrideAdmin(admin.ModelAdmin):
+    list_display = ("physician", "date", "is_closed", "start_time", "end_time")
+    list_filter = ("physician", "is_closed", "date")
+    search_fields = ("physician__username", "physician__email")
+    autocomplete_fields = ("physician",)
+    date_hierarchy = "date"
+    ordering = ("physician", "date", "start_time")
+
+
+@admin.register(TimeOff)
+class TimeOffAdmin(admin.ModelAdmin):
+    list_display = ("physician", "start", "end", "reason")
+    list_filter = ("physician", "start", "end")
+    search_fields = ("physician__username", "physician__email", "reason")
+    autocomplete_fields = ("physician",)
+    date_hierarchy = "start"
+    ordering = ("start",)
+
+
+# ----------------------------
+# NEW: Flexible Appointments (start/end)
+# ----------------------------
+@admin.register(FlexAppointment)
+class FlexAppointmentAdmin(admin.ModelAdmin):
+    list_display = ("patient", "physician", "status", "start", "end", "created_at")
+    list_filter = ("status", "physician", "created_at")
+    search_fields = ("patient__username", "physician__username", "notes")
+    ordering = ("start",)
+    date_hierarchy = "start"
+    autocomplete_fields = ("patient", "physician")
 
 
 # ----------------------------
