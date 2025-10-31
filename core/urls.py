@@ -29,9 +29,12 @@ urlpatterns = [
     # Messaging (independent of appointments)
     # ----------------------------
     path("messages/", views.chat_inbox, name="chat_inbox"),
-    path("messages/new/", views.chat_new, name="chat_new"),                         # ✅ add
-    path("messages/start/u/<uuid:peer_id>/", views.chat_start_with_user,            # ✅ add
-         name="chat_start_with_user"),
+    path("messages/new/", views.chat_new, name="chat_new"),
+    path(
+        "messages/start/u/<uuid:peer_id>/",
+        views.chat_start_with_user,
+        name="chat_start_with_user",
+    ),
 
     # Start/open using explicit patient/physician ids (kept)
     path(

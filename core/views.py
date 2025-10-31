@@ -41,6 +41,17 @@ from .forms import (
 from core.utils.availability import get_available_slots
 
 
+# -------------------------
+# Small helper: tokenized search
+# -------------------------
+def _tokens(q: str):
+    """
+    Split the query into cleaned tokens so 'pawan kalyan' becomes ['pawan','kalyan'].
+    We also strip a leading '@' so '@fahad' works for usernames.
+    """
+    return [t.lstrip("@").strip() for t in (q or "").replace(",", " ").split() if t.strip()]
+
+
 # =========================
 # AUTHENTICATION
 # =========================
@@ -240,6 +251,7 @@ def physician_dashboard(request):
     q = (request.GET.get("q") or "").strip()
     patients = PatientProfile.objects.filter(physician=physician)
     if q:
+        # Keep this simple here; dashboard can stay single-field if you prefer.
         patients = patients.filter(full_name__icontains=q)
 
     patients = patients.order_by("full_name")
@@ -772,61 +784,69 @@ def chat_inbox(request):
 @login_required
 def chat_new(request):
     """
-    Choose someone to message BEFORE any appointment exists.
-    Patients see physicians; physicians see patients.
-    Supports ?q= search by username/full_name/first/last/phone.
+    Start a new message:
+      - Physicians search PATIENT users
+      - Patients   search PHYSICIAN users
+    Uses reverse names 'patient' / 'physician' from User -> Profile relations.
     """
     q = (request.GET.get("q") or "").strip()
+    toks = [t for t in q.split() if t]
+
     me = request.user
+    is_physician_user = PhysicianProfile.objects.filter(user=me).exists()
+    is_patient_user   = PatientProfile.objects.filter(user=me).exists()
 
-    # patient → show physicians
-    try:
-        if hasattr(me, "is_patient") and me.is_patient():
-            qs = User.objects.filter(
-                Q(physicianprofile__isnull=False)
-            ).exclude(id=me.id)
+    # ---------------------------
+    # Physician → list PATIENTS
+    # ---------------------------
+    if is_physician_user:
+        base = User.objects.filter(patient__isnull=False).exclude(id=me.id)
 
-            if q:
+        if toks:
+            qs = base
+            for t in toks:
                 qs = qs.filter(
-                    Q(username__icontains=q) |
-                    Q(first_name__icontains=q) |
-                    Q(last_name__icontains=q)  |
-                    Q(physicianprofile__full_name__icontains=q)
+                    Q(username__icontains=t) |
+                    Q(first_name__icontains=t) |
+                    Q(last_name__icontains=t)  |
+                    Q(email__icontains=t)      |
+                    Q(patient__full_name__icontains=t) |
+                    Q(patient__phone__icontains=t)
                 )
+        else:
+            # no query → default to your own panel
+            qs = base.filter(patient__physician__user=me)
 
-            qs = qs.select_related("physicianprofile").order_by("username")[:50]
-            return render(request, "messaging/new.html",
-                          {"peers": qs, "mode": "patient_to_physician", "q": q})
-    except Exception:
-        pass
+        qs = qs.select_related("patient").order_by("username")[:50]
+        ctx = {"peers": qs, "results": qs, "mode": "physician_to_patient", "q": q}
+        return render(request, "messaging/new.html", ctx)
 
-    # physician → show patients
-    try:
-        if hasattr(me, "is_physician") and me.is_physician():
-            base = User.objects.filter(Q(patientprofile__isnull=False)).exclude(id=me.id)
+    # ---------------------------
+    # Patient → list PHYSICIANS
+    # ---------------------------
+    if is_patient_user:
+        base = User.objects.filter(physician__isnull=False).exclude(id=me.id)
 
-            if q:
-                # broad search across username, names, and patient profile fields
-                qs = base.filter(
-                    Q(username__icontains=q) |
-                    Q(first_name__icontains=q) |
-                    Q(last_name__icontains=q)  |
-                    Q(patientprofile__full_name__icontains=q) |
-                    Q(patientprofile__phone__icontains=q)
+        if toks:
+            qs = base
+            for t in toks:
+                qs = qs.filter(
+                    Q(username__icontains=t) |
+                    Q(first_name__icontains=t) |
+                    Q(last_name__icontains=t)  |
+                    Q(email__icontains=t)      |
+                    Q(physician__full_name__icontains=t)
                 )
-            else:
-                # no query → show this physician's linked patients first
-                qs = base.filter(patientprofile__physician__user=me)
+        else:
+            qs = base
 
-            qs = qs.select_related("patientprofile").order_by("username")[:50]
-            return render(request, "messaging/new.html",
-                          {"peers": qs, "mode": "physician_to_patient", "q": q})
-    except Exception:
-        pass
+        qs = qs.select_related("physician").order_by("username")[:50]
+        ctx = {"peers": qs, "results": qs, "mode": "patient_to_physician", "q": q}
+        return render(request, "messaging/new.html", ctx)
 
-    # fallback
-    return render(request, "messaging/new.html",
-                  {"peers": User.objects.none(), "mode": "unknown", "q": q})
+    # Fallback if the user has no profile
+    ctx = {"peers": User.objects.none(), "results": User.objects.none(), "mode": "unknown", "q": q}
+    return render(request, "messaging/new.html", ctx)
 
 @login_required
 def chat_start_with_user(request, peer_id):
@@ -866,10 +886,9 @@ def chat_thread(request, pk):
 
     msgs = convo.messages.select_related("sender").order_by("created_at")
 
-    # Initialize last_ts with the timestamp (epoch seconds) of the latest message
+    # initialize last_ts from latest message (or 0)
     if msgs.exists():
         last_dt = msgs.last().created_at
-        # ensure aware => convert to epoch seconds safely
         if timezone.is_naive(last_dt):
             last_dt = timezone.make_aware(last_dt, timezone.get_current_timezone())
         last_ts = last_dt.timestamp()
@@ -879,7 +898,11 @@ def chat_thread(request, pk):
     return render(
         request,
         "messaging/thread.html",
-        {"convo": convo, "messages": msgs, "last_ts": last_ts},
+        {
+            "convo": convo,
+            "chat_messages": msgs,   # <<< renamed
+            "last_ts": last_ts,      # we’ll use this in JS init
+        },
     )
 
 @login_required
@@ -946,7 +969,6 @@ def chat_fetch_since(request, pk, ts):
 
 @login_required
 def chat_room(request, peer_id):
-    """Open (or create) the conversation between the current user and `peer_id`."""
     peer = get_object_or_404(User, id=peer_id)
     me = request.user
 
@@ -962,13 +984,19 @@ def chat_room(request, peer_id):
         patient=patient_user,
     )
 
-    messages_qs = Message.objects.filter(conversation=convo).select_related("sender").order_by("created_at")
+    messages_qs = Message.objects.filter(conversation=convo)\
+                                 .select_related("sender")\
+                                 .order_by("created_at")
 
-    return render(request, "chat/room.html", {
-        "peer": peer,
-        "conversation": convo,
-        "messages": messages_qs,
-    })
+    return render(
+        request,
+        "chat/room.html",
+        {
+            "peer": peer,
+            "conversation": convo,
+            "chat_messages": messages_qs,  # <<< renamed here too
+        },
+    )
 
 
 @csrf_exempt  # allow simple fetch() without CSRF token

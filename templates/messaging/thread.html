@@ -21,12 +21,8 @@
      class="border rounded bg-white p-3 mb-3"
      style="height: 440px; overflow-y: auto;">
 
-  {% comment %}
-  We render all messages inside the chat box only.
-  Nothing renders above this container.
-  {% endcomment %}
-
-  {% for m in messages %}
+  {% comment %} Use chat_messages to avoid clashing with Django messages framework {% endcomment %}
+  {% for m in chat_messages %}
     <div class="d-flex mb-2
                 {% if m.sender_id == request.user.id %}justify-content-end{% else %}justify-content-start{% endif %}"
          data-mid="{{ m.id }}">
@@ -68,11 +64,8 @@
     Array.from(chatBox.querySelectorAll('[data-mid]')).map(n => n.getAttribute('data-mid'))
   );
 
-  // Start from server-side "now" (epoch seconds) if provided; else 0
-  let last_ts = Number("{{ server_time|default:'0' }}");
-
-
-
+  // Initialize from server-provided last_ts (falls back to 0)
+  let last_ts = Number("{{ last_ts|default:'0' }}");
 
   async function poll() {
     try {
@@ -102,9 +95,7 @@
       if (typeof data.server_time === "number") {
         last_ts = data.server_time;
       }
-    } catch (e) {
-      // no-op; keep polling
-    }
+    } catch (e) { /* ignore */ }
   }
 
   // Poll every 3 seconds

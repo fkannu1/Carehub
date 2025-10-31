@@ -10,7 +10,9 @@ from django.db.models import Q
 from core.models import (
     PhysicianWeeklyAvailability,
     PhysicianDateOverride,
-    Appointment,
+    Appointment,          # legacy fixed-slot appts (via AvailabilitySlot)
+    FlexAppointment,      # <<< NEW: variable duration appts
+    AvailabilitySlot,     # <<< NEW: pre-sliced rows that may already be booked
 )
 
 # Internal type for a daily free window: (start_dt, end_dt, step_minutes)
@@ -109,15 +111,42 @@ def _iter_candidates(window: Window, slot_minutes: int) -> Iterable[datetime]:
 
 def _has_conflict(physician_user, start_dt: datetime, end_dt: datetime) -> bool:
     """
-    A conflict exists if the physician has any confirmed/pending appointment overlapping
-    [start_dt, end_dt). (Legacy Appointment model is used to prevent overbooking.)
+    A conflict exists if ANY of the following overlap [start_dt, end_dt):
+      - legacy Appointment (via AvailabilitySlot)
+      - FlexAppointment (variable duration)
+      - AvailabilitySlot rows already marked is_booked=True
     """
-    return Appointment.objects.filter(
+    # Legacy fixed-slot appointments
+    legacy_overlap = Appointment.objects.filter(
         physician=physician_user,
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
     ).filter(
         Q(slot__start__lt=end_dt) & Q(slot__end__gt=start_dt)
     ).exists()
+
+    if legacy_overlap:
+        return True
+
+    # Flex appointments
+    flex_overlap = FlexAppointment.objects.filter(
+        physician=physician_user,
+        status__in=[FlexAppointment.Status.PENDING, FlexAppointment.Status.CONFIRMED],
+    ).filter(
+        Q(start__lt=end_dt) & Q(end__gt=start_dt)
+    ).exists()
+
+    if flex_overlap:
+        return True
+
+    # Any pre-sliced availability already booked
+    booked_slice_overlap = AvailabilitySlot.objects.filter(
+        physician=physician_user,
+        is_booked=True,
+    ).filter(
+        Q(start__lt=end_dt) & Q(end__gt=start_dt)
+    ).exists()
+
+    return booked_slice_overlap
 
 
 def get_available_slots(physician_user, date_obj, slot_minutes: int) -> List[datetime]:
@@ -140,7 +169,7 @@ def get_available_slots(physician_user, date_obj, slot_minutes: int) -> List[dat
             if start < now:
                 continue
 
-            # Skip conflicts with existing appointments
+            # Skip conflicts with existing bookings (legacy, flex, or pre-sliced booked)
             if _has_conflict(physician_user, start, end):
                 continue
 

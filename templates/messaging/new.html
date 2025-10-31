@@ -7,26 +7,65 @@
   <h3 class="mb-0">Start a new message</h3>
   <a class="btn btn-outline-secondary btn-sm" href="{% url 'chat_inbox' %}">Back to Inbox</a>
 </div>
-<p class="text-muted">Browse {% if mode == 'physician_to_patient' %}patients{% elif mode == 'patient_to_physician' %}physicians{% else %}users{% endif %} and start a conversation—no appointment required.</p>
 
-<form method="get" class="d-flex gap-2 mb-3" role="search">
-  <input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search by username or name">
+<p class="text-muted">
+  Browse
+  {% if mode == 'physician_to_patient' %}patients{% elif mode == 'patient_to_physician' %}physicians{% else %}users{% endif %}
+  and start a conversation—no appointment required.
+</p>
+
+<form method="get" class="d-flex gap-2 mb-3" role="search" action="">
+  <input
+    class="form-control"
+    type="search"
+    name="q"
+    value="{{ q|default:'' }}"
+    placeholder="Search by @username, first/last name, email, or phone"
+    autofocus
+  >
   <button class="btn btn-primary">Search</button>
 </form>
 
 {% if peers and peers|length %}
-  <div class="list-group">
-    {% for u in peers %}
-      <a class="list-group-item list-group-item-action d-flex align-items-center justify-content-between"
-         href="{% url 'chat_start_with_user' u.id %}">
-        <span><strong>@{{ u.username }}</strong></span>
-        <span class="text-muted">Message →</span>
-      </a>
-    {% endfor %}
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="text-muted small">
+      Showing {{ peers|length }} result{% if peers|length != 1 %}s{% endif %}
+      {% if q %} for “{{ q }}”{% endif %}
+    </span>
   </div>
+
+  <ul class="list-group">
+    {% for u in peers %}
+      <li class="list-group-item d-flex align-items-center justify-content-between">
+        <div>
+          <div><strong>@{{ u.username }}</strong></div>
+          <div class="text-muted">
+            {# Prefer human name if present #}
+            {% if u.first_name or u.last_name %}
+              {{ u.first_name }} {{ u.last_name }}
+            {% elif u.patient and u.patient.full_name %}
+              {{ u.patient.full_name }}
+            {% elif u.physician and u.physician.full_name %}
+              {{ u.physician.full_name }}
+            {% endif %}
+            {% if u.email %} · {{ u.email }}{% endif %}
+            {% if u.patient and u.patient.phone %} · {{ u.patient.phone }}{% endif %}
+          </div>
+        </div>
+
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'chat_start_with_user' u.id %}">
+          Message →
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
 {% else %}
   <div class="alert alert-info d-flex justify-content-between align-items-center">
-    {% if q %}No results for “{{ q }}”.{% else %}No users to show yet.{% endif %}
+    {% if q %}
+      No results for “{{ q }}”.
+    {% else %}
+      No users to show yet.
+    {% endif %}
     <a class="btn btn-outline-primary btn-sm" href="{% url 'chat_inbox' %}">Go to Inbox</a>
   </div>
 {% endif %}

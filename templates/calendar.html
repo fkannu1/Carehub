@@ -112,45 +112,7 @@
     const pickedStartText = document.getElementById('pickedStartText');
     let pendingStartIso = null;   // selection start we’ll use to create window
 
-    // duration button handler (physician creation)
-    modalEl.querySelectorAll('.dur-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const min = parseInt(btn.dataset.min, 10);
-        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
-        if (!physicianId || !pendingStartIso) return;
-
-        const startDate = new Date(pendingStartIso);
-        const endIso = new Date(startDate.getTime() + min * 60000).toISOString();
-
-        try {
-          const res = await fetch(`/api/physicians/${physicianId}/availability/`, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCookie('csrftoken'),
-            },
-            body: JSON.stringify({ start: pendingStartIso, end: endIso })
-          });
-          if (!res.ok) {
-            const t = await res.text().catch(()=> '');
-            throw new Error(t || 'Failed to save availability');
-          }
-
-          // make the chosen length visible immediately
-          durationSelect.value = String(min);
-
-          modal.hide();
-          showToast(`Availability ${min} min created`);
-          calendar.unselect();
-          calendar.refetchEvents();
-        } catch (e) {
-          console.error(e);
-          showToast(e.message || 'Failed to save availability', false);
-        }
-      });
-    });
-
+    // Ensure a physician is preselected when available
     if (DEFAULT_PHYSICIAN_ID && !physicianSelect.value) {
       physicianSelect.value = DEFAULT_PHYSICIAN_ID;
     }
@@ -160,16 +122,17 @@
       height: 'auto',
       nowIndicator: true,
 
-      // <<< important for 45-min support >>>
-      slotDuration: '00:15:00',     // grid rows are 15 minutes
-      snapDuration: '00:15:00',     // selections/clicks snap to 15 minutes
-      slotLabelInterval: '01:00',   // hour labels
-
-      selectable: IS_PHYSICIAN,     // physicians can select to create
-      selectMirror: true,
-      unselectAuto: true,
+      // 15-min grid so 45-min selections/starts align
+      slotDuration: '00:15:00',
+      snapDuration: '00:15:00',
+      slotLabelInterval: '01:00',
       slotMinTime: '06:00:00',
       slotMaxTime: '22:00:00',
+
+      selectable: IS_PHYSICIAN,
+      selectMirror: true,
+      unselectAuto: true,
+
       headerToolbar: {
         start: 'prev,next today',
         center: 'title',
@@ -182,12 +145,16 @@
         const duration = durationSelect.value || 30;
         if (!physicianId) { success([]); return; }
 
-        const url = `/api/physicians/${physicianId}/slots/?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}&duration=${encodeURIComponent(duration)}`;
+        const url =
+          `/api/physicians/${physicianId}/slots/` +
+          `?start=${encodeURIComponent(info.startStr)}` +
+          `&end=${encodeURIComponent(info.endStr)}` +
+          `&duration=${encodeURIComponent(duration)}`;
 
         try {
           const res = await fetch(url, { credentials: 'same-origin' });
           if (!res.ok) {
-            const t = await res.text().catch(()=>'');
+            const t = await res.text().catch(()=> '');
             throw new Error(t || 'Failed to load slots');
           }
           const data = await res.json();
@@ -205,7 +172,6 @@
         const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
         if (!physicianId) { showToast('Select a physician first', false); return; }
 
-        // We ignore how far the user dragged; anchor at selection start.
         pendingStartIso = selectionInfo.start.toISOString();
         pickedStartText.textContent = `Start: ${selectionInfo.start.toLocaleString()}`;
 
@@ -245,6 +211,7 @@
           }
           await res.json();
           showToast('Appointment booked');
+          calendar.removeAllEvents();
           calendar.refetchEvents();
         } catch (e) {
           console.error(e);
@@ -255,9 +222,52 @@
 
     calendar.render();
 
-    reloadBtn.addEventListener('click', () => calendar.refetchEvents());
-    physicianSelect.addEventListener('change', () => calendar.refetchEvents());
-    durationSelect.addEventListener('change', () => calendar.refetchEvents());
+    // Physician availability creation: choose length
+    modalEl.querySelectorAll('.dur-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const min = parseInt(btn.dataset.min, 10);
+        const physicianId = physicianSelect.value || DEFAULT_PHYSICIAN_ID;
+        if (!physicianId || !pendingStartIso) return;
+
+        const startDate = new Date(pendingStartIso);
+        const endIso = new Date(startDate.getTime() + min * 60000).toISOString();
+
+        try {
+          const res = await fetch(`/api/physicians/${physicianId}/availability/`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ start: pendingStartIso, end: endIso })
+          });
+          if (!res.ok) {
+            const t = await res.text().catch(()=> '');
+            throw new Error(t || 'Failed to save availability');
+          }
+
+          // Switch view to the chosen length to make it obvious
+          durationSelect.value = String(min);
+
+          modal.hide();
+          showToast(`Availability ${min} min created`);
+          calendar.unselect();
+          calendar.removeAllEvents();     // <<< clear old events
+          calendar.refetchEvents();       // <<< fetch fresh with new duration
+        } catch (e) {
+          console.error(e);
+          showToast(e.message || 'Failed to save availability', false);
+        }
+      });
+    });
+
+    // Controls: clear events before refetch to avoid mixing durations
+    const refetchClean = () => { calendar.removeAllEvents(); calendar.refetchEvents(); };
+
+    reloadBtn.addEventListener('click', refetchClean);
+    physicianSelect.addEventListener('change', refetchClean);
+    durationSelect.addEventListener('change', refetchClean);
 
     // Also allow single click to open the modal at that start (handy on mobile)
     if (IS_PHYSICIAN) {
