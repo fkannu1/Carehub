@@ -5,6 +5,7 @@ from django.db import models, transaction
 from django.utils import timezone
 from datetime import timedelta
 import uuid
+import secrets
 
 
 # ----------------------------
@@ -29,6 +30,17 @@ class User(AbstractUser):
 
 
 # ----------------------------
+# helpers
+# ----------------------------
+_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # avoid 0/1/O/I for readability
+
+
+def generate_connect_code(n: int = 8) -> str:
+    """Collision-resistant, human-friendly code."""
+    return "".join(secrets.choice(_ALPHABET) for _ in range(n))
+
+
+# ----------------------------
 # PROFILES & RECORDS
 # ----------------------------
 class PhysicianProfile(models.Model):
@@ -42,8 +54,17 @@ class PhysicianProfile(models.Model):
     specialization = models.CharField(max_length=150, blank=True)
     clinic_name = models.CharField(max_length=150, blank=True)
 
-    # Your existing "exclusive connect code" used to link patients to this physician
-    connect_code = models.CharField(max_length=12, unique=True)
+    # Unique connect code used by patients to link to this physician
+    connect_code = models.CharField(max_length=12, unique=True, blank=True, db_index=True)
+
+    def save(self, *args, **kwargs):
+        # Auto-generate a unique connect_code if missing
+        if not self.connect_code:
+            code = generate_connect_code()
+            while PhysicianProfile.objects.filter(connect_code=code).exists():
+                code = generate_connect_code()
+            self.connect_code = code
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return self.full_name or self.user.username
@@ -59,7 +80,7 @@ class PatientProfile(models.Model):
     phone = models.CharField(max_length=30, blank=True)
     address = models.TextField(blank=True)
 
-    # Linked physician via your exclusive code flow
+    # Linked physician via exclusive code flow
     physician = models.ForeignKey(
         PhysicianProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name="patients"
     )

@@ -1,33 +1,17 @@
 # core/utils/availability.py
+# Show ONLY persisted AvailabilitySlot rows (no virtual generation)
+
 from __future__ import annotations
-
-from datetime import datetime, timedelta, time as dtime
-from typing import Iterable, List, Tuple
-
+from datetime import datetime, time as dtime, timedelta
+from typing import List
 from django.utils import timezone
 from django.db.models import Q
-
-from core.models import (
-    PhysicianWeeklyAvailability,
-    PhysicianDateOverride,
-    Appointment,          # legacy fixed-slot appts (via AvailabilitySlot)
-    FlexAppointment,      # <<< NEW: variable duration appts
-    AvailabilitySlot,     # <<< NEW: pre-sliced rows that may already be booked
-)
-
-# Internal type for a daily free window: (start_dt, end_dt, step_minutes)
-Window = Tuple[datetime, datetime, int]
-
+from core.models import AvailabilitySlot, Appointment, FlexAppointment
 
 def _local_tz():
     return timezone.get_current_timezone()
 
-
 def _aware_local(date_obj, t: dtime) -> datetime:
-    """
-    Combine a date and a time and return a TZ-AWARE datetime in the current tz.
-    Works for both naive and tz-aware `time` values.
-    """
     dt = datetime.combine(date_obj, t)
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt, _local_tz())
@@ -35,145 +19,63 @@ def _aware_local(date_obj, t: dtime) -> datetime:
         dt = dt.astimezone(_local_tz())
     return dt
 
-
-def _day_windows_for_physician(physician_user, date_obj) -> List[Window]:
-    """
-    Collect free-time windows for a given local calendar date from:
-      1) Date overrides (highest precedence)
-      2) Weekly repeating availability
-    Returns list of (start_dt, end_dt, step_minutes).
-    """
-    # 1) Date overrides
-    override_qs = PhysicianDateOverride.objects.filter(
-        physician=physician_user,
-        date=date_obj,
-    )
-
-    # If explicitly closed, no windows that day
-    if override_qs.filter(is_closed=True).exists():
-        return []
-
-    override_windows = override_qs.filter(is_closed=False).order_by("start_time")
-    if override_windows.exists():
-        return [
-            (_aware_local(date_obj, o.start_time), _aware_local(date_obj, o.end_time), 15)
-            for o in override_windows
-        ]
-
-    # 2) Weekly availability (when no override present)
-    weekday = date_obj.weekday()  # Mon=0 .. Sun=6
-    weekly_qs = PhysicianWeeklyAvailability.objects.filter(
-        physician=physician_user, weekday=weekday, is_active=True
-    ).order_by("start_time")
-
-    windows: List[Window] = []
-    for w in weekly_qs:
-        start_dt = _aware_local(date_obj, w.start_time)
-        end_dt = _aware_local(date_obj, w.end_time)
-        if end_dt > start_dt:
-            windows.append((start_dt, end_dt, 15))
-    return windows
-
-
-def _round_up_to_step(dt: datetime, step_minutes: int) -> datetime:
-    """
-    Round a datetime UP to the next multiple of `step_minutes` from midnight,
-    preserving timezone.
-    """
-    # snap to minute boundary first
-    base = dt.replace(second=0, microsecond=0)
-    minutes_from_midnight = base.hour * 60 + base.minute
-    remainder = minutes_from_midnight % step_minutes
-    if remainder == 0 and base >= dt:
-        return base
-    bump = (step_minutes - remainder) % step_minutes
-    snapped = base + timedelta(minutes=bump)
-    if snapped <= dt:  # guard when dt had seconds/micros
-        snapped += timedelta(minutes=step_minutes)
-    return snapped
-
-
-def _iter_candidates(window: Window, slot_minutes: int) -> Iterable[datetime]:
-    """
-    Yield duration-aligned, NON-overlapping candidate starts inside `window`.
-    The step is the requested slot size (30/45/60), not the window's native step.
-    """
-    start, end, _ignored_step = window
-    step_td = timedelta(minutes=slot_minutes)
-
-    cur = _round_up_to_step(start, slot_minutes)
-    latest_start = end - timedelta(minutes=slot_minutes)
-
-    while cur <= latest_start:
-        yield cur
-        cur += step_td
-
-
 def _has_conflict(physician_user, start_dt: datetime, end_dt: datetime) -> bool:
-    """
-    A conflict exists if ANY of the following overlap [start_dt, end_dt):
-      - legacy Appointment (via AvailabilitySlot)
-      - FlexAppointment (variable duration)
-      - AvailabilitySlot rows already marked is_booked=True
-    """
-    # Legacy fixed-slot appointments
+    # legacy (slot-based) appointments
     legacy_overlap = Appointment.objects.filter(
         physician=physician_user,
         status__in=[Appointment.Status.PENDING, Appointment.Status.CONFIRMED],
-    ).filter(
-        Q(slot__start__lt=end_dt) & Q(slot__end__gt=start_dt)
+        slot__start__lt=end_dt,
+        slot__end__gt=start_dt,
     ).exists()
-
     if legacy_overlap:
         return True
 
-    # Flex appointments
+    # flexible appointments
     flex_overlap = FlexAppointment.objects.filter(
         physician=physician_user,
         status__in=[FlexAppointment.Status.PENDING, FlexAppointment.Status.CONFIRMED],
-    ).filter(
-        Q(start__lt=end_dt) & Q(end__gt=start_dt)
-    ).exists()
-
+    ).filter(Q(start__lt=end_dt) & Q(end__gt=start_dt)).exists()
     if flex_overlap:
         return True
 
-    # Any pre-sliced availability already booked
+    # pre-sliced availability that has been marked booked
     booked_slice_overlap = AvailabilitySlot.objects.filter(
-        physician=physician_user,
-        is_booked=True,
-    ).filter(
-        Q(start__lt=end_dt) & Q(end__gt=start_dt)
-    ).exists()
+        physician=physician_user, is_booked=True
+    ).filter(start__lt=end_dt, end__gt=start_dt).exists()
 
     return booked_slice_overlap
 
-
 def get_available_slots(physician_user, date_obj, slot_minutes: int) -> List[datetime]:
     """
-    Compute available start datetimes (TZ-aware) for `slot_minutes` inside
-    the physician's windows for `date_obj`, aligned to the duration grid.
+    Return candidate start datetimes derived ONLY from manual AvailabilitySlot rows
+    (is_booked=False) on the given local date. No weekly templates or overrides.
     """
+    tz = _local_tz()
     now = timezone.now()
-    result: List[datetime] = []
 
-    windows = _day_windows_for_physician(physician_user, date_obj)
-    if not windows:
-        return result
+    day_start = _aware_local(date_obj, dtime.min)
+    day_end = _aware_local(date_obj, dtime.max)
 
-    for win in windows:
-        for start in _iter_candidates(win, slot_minutes):
-            end = start + timedelta(minutes=slot_minutes)
+    # Pull persisted rows for the day
+    rows = AvailabilitySlot.objects.filter(
+        physician=physician_user,
+        is_booked=False,
+        start__gte=day_start,
+        start__lt=day_end,
+    ).order_by("start")
 
-            # Skip past times (don't offer a start that's already in the past)
-            if start < now:
-                continue
+    starts: List[datetime] = []
+    for r in rows:
+        s = r.start.astimezone(tz) if timezone.is_aware(r.start) else timezone.make_aware(r.start, tz)
+        e = r.end.astimezone(tz) if timezone.is_aware(r.end) else timezone.make_aware(r.end, tz)
 
-            # Skip conflicts with existing bookings (legacy, flex, or pre-sliced booked)
-            if _has_conflict(physician_user, start, end):
-                continue
+        # skip past
+        if s < now:
+            continue
 
-            result.append(start)
+        # emit the exact row’s start if it can fit the requested duration and doesn’t conflict
+        if (e - s) >= timedelta(minutes=slot_minutes) and not _has_conflict(physician_user, s, s + timedelta(minutes=slot_minutes)):
+            starts.append(s)
 
-    result.sort()
-    return result
+    # unique + sorted
+    return sorted(set(starts))

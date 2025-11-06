@@ -10,7 +10,7 @@
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h3 class="mb-0">{{ title|default:"My Appointments" }}</h3>
 
-    {% if user.is_authenticated and user.is_physician %}
+    {% if is_physician %}
       <div class="btn-group">
         <a href="{% url 'my_appointments' %}?scope=today"
            class="btn btn-sm btn-outline-secondary {% if title and 'Today' in title %}active{% endif %}">
@@ -24,7 +24,7 @@
     {% endif %}
   </div>
 
-  {# -------- NEW UNIFIED LIST (preferred) -------- #}
+  {# -------- UNIFIED NORMALIZED LIST -------- #}
   {% if items %}
     <table class="table table-striped table-hover align-middle">
       <thead class="table-light">
@@ -42,23 +42,35 @@
             <td>{{ r.date_str }}</td>
             <td>{{ r.time_str }}</td>
             <td>{{ r.peer_name }}</td>
-            <td><span class="badge bg-success">{{ r.status }}</span></td>
             <td>
-              <a class="btn btn-sm btn-outline-primary" href="{{ r.chat_url }}">Open Chat</a>
+              {% if r.status == "CONFIRMED" %}
+                <span class="badge bg-success">CONFIRMED</span>
+              {% elif r.status == "PENDING" %}
+                <span class="badge bg-warning text-dark">PENDING</span>
+              {% elif r.status == "CANCELLED" %}
+                <span class="badge bg-secondary">CANCELLED</span>
+              {% else %}
+                <span class="badge bg-light text-dark">{{ r.status }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if r.chat_url %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ r.chat_url }}">Open Chat</a>
+              {% endif %}
             </td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
 
-  {# -------- LEGACY FALLBACK (legacy Appointment queryset) -------- #}
+  {# -------- LEGACY FALLBACK (if someone still renders with `appointments`) -------- #}
   {% elif appointments %}
     <table class="table table-striped table-hover align-middle">
       <thead class="table-light">
         <tr>
           <th style="width: 14rem;">Date</th>
           <th style="width: 16rem;">Time</th>
-          {% if user.is_patient %}
+          {% if is_patient %}
             <th>Physician</th>
           {% else %}
             <th>Patient</th>
@@ -73,7 +85,7 @@
             <td>{{ appt.slot.start|localtime|date:"M d, Y" }}</td>
             <td>{{ appt.slot.start|localtime|time:"H:i" }} – {{ appt.slot.end|localtime|time:"H:i" }}</td>
 
-            {% if user.is_patient %}
+            {% if is_patient %}
               <td>{{ appt.physician.username }}</td>
             {% else %}
               <td>{{ appt.patient.username }}</td>
@@ -92,7 +104,7 @@
             </td>
 
             <td>
-              {% if user.is_patient %}
+              {% if is_patient %}
                 <a class="btn btn-sm btn-outline-primary"
                    href="{% url 'chat-room' appt.physician.id %}">Open Chat</a>
               {% else %}
